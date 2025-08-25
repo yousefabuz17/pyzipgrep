@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=42", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyzipgrep"
+version = "0.0.1"
+authors = [
+    { name = "Yousef Abuzahrieh", email = "yousefzahrieh17@gmail.com" }
+]
+description = "pyzipgrep is a Python library and CLI tool for streaming, searching, and inspecting archive files."
+requires-python = ">=3.13"
+readme = "README.md"
+license = { file = "LICENSE" }
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Utilities",
+    "Topic :: System :: Archiving :: Compression",
+    "Topic :: Text Processing :: Filters"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "ruff",
+    "mypy",
+    "coverage"
+]
+
+[project.urls]
+Homepage = "https://github.com/yousefabuz17/pyzipgrep"
+Repository = "https://github.com/yousefabuz17/pyzipgrep.git"
+Issues = "https://github.com/yousefabuz17/pyzipgrep/issues"
+
+[project.scripts]
+pyzipgrep = "pyzipgrep.cli:cli_parser"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"
+exclude = [
+    "build",
+    "dist",
+    ".venv",
+    ".uv",
+    ".git",
+    "**/__pycache__"
+]
+include = ["src/pyzipgrep"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+line-ending = "auto"
+docstring-code-format = true
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B"]
+fixable = ["ALL"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
