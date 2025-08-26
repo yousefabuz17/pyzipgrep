@@ -6,6 +6,8 @@ from ..utils.common import has_attribute
 
 
 
+
+
 class ArchiveReader(ArchiveMetadata, CoreZip):
     def __init__(self, archive_file):
         self._archive_file = Path(archive_file).expanduser()

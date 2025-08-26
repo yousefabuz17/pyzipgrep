@@ -8,13 +8,8 @@ from .reader import ArchiveReader
 from ..utils.common import (
     DEFAULT_CHUNK_SIZE,
     bytes_to_str,
-    get_logger,
     validate_chunk_size
-    )
-
-
-
-logger = get_logger()
+)
 
 
 

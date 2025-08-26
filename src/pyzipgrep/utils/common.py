@@ -1,6 +1,14 @@
+import logging
+
 from os import PathLike as _PathLike
 from itertools import tee
 from typing import Union
+
+from .exceptions import (
+    InvalidChunkSize,
+    InvalidPredicateException
+)
+
 
 
 DEFAULT_CHUNK_SIZE = 1024   # 1KB
@@ -9,9 +17,9 @@ DEFAULT_CHUNK_SIZE = 1024   # 1KB
 PathLike = Union[str, _PathLike]
 
 
+
+
 def get_logger():
-    import logging
-    
     root_logger = logging.getLogger()
     
     if root_logger.hasHandlers():
@@ -20,7 +28,7 @@ def get_logger():
     level = logging.INFO
 
     formatter = logging.Formatter(
-        fmt="[%(asctime)s]--%(message)s",
+        fmt="[%(asctime)s-%(levelname)s]--%(message)s",
         datefmt="%Y-%m-%dT%I:%M:%S%p",
     )
     
@@ -34,14 +42,31 @@ def get_logger():
     return root_logger
 
 
-logger = get_logger()
-
-
 
 def bytes_to_str(obj):
     if isinstance(obj, bytes):
         obj = obj.decode("utf-8", errors="ignore")
     return obj
+
+
+def validate_predicate(predicate, predicate_name):
+    import inspect
+    
+    if predicate is None:
+        return
+    
+    predicate_params = inspect.signature(predicate).parameters
+    len_params = len(predicate_params)
+    valid_predicate = all((
+        (is_callable := callable(predicate)),
+        len_params == 1
+    ))
+    
+    if not valid_predicate:
+        raise InvalidPredicateException(
+            f"Invalid predicate '{predicate_name}': must be callable AND accept exactly 1 argument."
+            f"\nReturned {is_callable = } and {len_params!r} params."
+        )
 
 
 
@@ -83,12 +108,10 @@ def calculate_days_since_created(time_created):
 def get_posix_name(fp):
     if is_pathlike(fp) and hasattr(fp, "name"):
         fp = fp.name
+    elif has_attribute(fp, "archive_file"):
+        fp = get_posix_name(fp.archive_file)
     return fp
 
-
-def log_exception(msg, error):
-    error = unpack_error(error)
-    logger.exception(f"{msg}\nError: {error}")
 
 
 def validate_chunk_size(chunk_size=None):
@@ -97,6 +120,13 @@ def validate_chunk_size(chunk_size=None):
     
     if not is_numeric(chunk_size):
         chunk_size = DEFAULT_CHUNK_SIZE
+    
+    if chunk_size == 0:
+        raise InvalidChunkSize(
+            f"Invalid chunk size: {chunk_size!r}. "
+            "Chunk size must be either `None` (to read the entire file) "
+            "or a positive integer. Any other chunk size of <0 will be ignored."
+        )
     return chunk_size
 
 
@@ -112,10 +142,17 @@ def is_numeric(obj):
     return any((is_int(obj), is_float(obj)))
 
 
+def terminate(status):
+    import sys
+    sys.exit(status)
+
+
 def calculate_ratio(
     compressed_size: int | float,
     uncompressed_size: int | float
     ):
+    if uncompressed_size == 0:
+        return
     ratio = (1 - compressed_size / uncompressed_size) * 100
     return round(ratio, 2)
 

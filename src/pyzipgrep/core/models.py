@@ -26,7 +26,7 @@ class CoreZip:
     ZipFile: ClassVar[type[zipfile.ZipFile]] = zipfile.ZipFile
     is_zipfile: ClassVar[staticmethod] = staticmethod(zipfile.is_zipfile)
     
-    # TODO: Support for other file types? tar.bz2 
+    # TODO: Support for other file types? tar.bz2
     TarFile: ClassVar[type[tarfile.TarFile]] = tarfile.TarFile
     is_tarfile: ClassVar[staticmethod] = staticmethod(tarfile.is_tarfile)
 
