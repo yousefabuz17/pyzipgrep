@@ -1,21 +1,26 @@
+import os
 import logging
-
-from os import PathLike as _PathLike
+import re
 from itertools import tee
+from datetime import datetime
 from typing import Union
 
-from .exceptions import (
-    InvalidChunkSize,
-    InvalidPredicateException
-)
 
 
 
 DEFAULT_CHUNK_SIZE = 1024   # 1KB
 
 
-PathLike = Union[str, _PathLike]
+PathLike = Union[str, os.PathLike]
 
+
+
+class ClassProperty:
+    def __init__(self, fget):
+        self.fget = fget
+    
+    def __get__(self, instance, owner):
+        return self.fget(owner)
 
 
 
@@ -42,6 +47,28 @@ def get_logger():
     return root_logger
 
 
+def default_max_workers():
+    return min(32, (os.cpu_count() or 1) + 4)
+
+
+def fn_matcher(name, pat):
+    from fnmatch import fnmatch, fnmatchcase
+    from functools import partial
+    from pathlib import Path
+    from re import Pattern
+    
+    def _fnmatcher(n, p):
+        return any((
+            Path(n).match(p),
+            fnmatch(n, p),
+            fnmatchcase(n, p)
+            ))
+    
+    if not isinstance(pat, (str, Pattern)):
+        return any(map(partial(_fnmatcher, name), pat))
+    return _fnmatcher(name, pat)
+
+
 
 def bytes_to_str(obj):
     if isinstance(obj, bytes):
@@ -63,15 +90,19 @@ def validate_predicate(predicate, predicate_name):
     ))
     
     if not valid_predicate:
-        raise InvalidPredicateException(
+        logger = get_logger()
+        logger.error(
             f"Invalid predicate '{predicate_name}': must be callable AND accept exactly 1 argument."
             f"\nReturned {is_callable = } and {len_params!r} params."
         )
+        terminate(1)
+
 
 
 
 def unpack_error(e):
     return str(e.args[0] if e.args else e)
+
 
 
 def has_attribute(obj, attr, check_value=True):
@@ -96,16 +127,29 @@ def is_pathlike(fp):
     return isinstance(fp, PathLike)
 
 
+def fromtimestamp(time_created: float | datetime):
+    if not is_numeric(time_created):
+        return
+    return datetime.fromtimestamp(time_created)
+
+
+def calculate_date_since_created(time_created):
+    time_created = fromtimestamp(time_created)
+
+    if time_created is None:
+        return
+    
+    current_age = datetime.now() - time_created
+    return current_age
+
 
 def calculate_days_since_created(time_created):
-    from datetime import datetime
-    
-    if is_float(time_created):
-        time_created = datetime.fromtimestamp(time_created)
-    return (datetime.now() - time_created).days
+    time_created = calculate_date_since_created(time_created)
+    if time_created:
+        return time_created.days
 
 
-def get_posix_name(fp):
+def get_posix_name(fp) -> str:
     if is_pathlike(fp) and hasattr(fp, "name"):
         fp = fp.name
     elif has_attribute(fp, "archive_file"):
@@ -122,24 +166,23 @@ def validate_chunk_size(chunk_size=None):
         chunk_size = DEFAULT_CHUNK_SIZE
     
     if chunk_size == 0:
-        raise InvalidChunkSize(
+        logger = get_logger()
+        logger.error(
             f"Invalid chunk size: {chunk_size!r}. "
             "Chunk size must be either `None` (to read the entire file) "
             "or a positive integer. Any other chunk size of <0 will be ignored."
         )
+        terminate(1)
     return chunk_size
 
 
-def is_int(obj):
-    return isinstance(obj, int)
-
-
-def is_float(obj):
-    return isinstance(obj, float)
-
-
 def is_numeric(obj):
-    return any((is_int(obj), is_float(obj)))
+    from math import isnan
+    return not isnan(obj)
+
+
+def is_string(string):
+    return isinstance(string, str)
 
 
 def terminate(status):
@@ -151,6 +194,9 @@ def calculate_ratio(
     compressed_size: int | float,
     uncompressed_size: int | float
     ):
+    if not any(map(is_numeric, (compressed_size, uncompressed_size))):
+        return
+    
     if uncompressed_size == 0:
         return
     ratio = (1 - compressed_size / uncompressed_size) * 100
@@ -162,3 +208,12 @@ def make_clones(obj, n=2, as_iter=True):
     if as_iter:
         obj = iter(obj)
     return obj
+
+
+
+def compiler(pattern, flags=0):
+    return re.compile(pattern, flags=flags)
+
+
+def regex_escape(s):
+    return re.escape(s)

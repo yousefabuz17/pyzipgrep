@@ -1,6 +1,5 @@
-import zipfile
 import tarfile
-
+import zipfile
 from dataclasses import (
     asdict,
     dataclass,
@@ -10,21 +9,18 @@ from dataclasses import (
 from datetime import datetime
 from typing import Any, ClassVar, Optional
 
-
 from ..utils.common import (
     PathLike,
     calculate_days_since_created,
     calculate_ratio,
-    is_numeric,
+    fromtimestamp,
     get_posix_name,
 )
 
 
-
-
 class CoreZip:
     ZipFile: ClassVar[type[zipfile.ZipFile]] = zipfile.ZipFile
-    is_zipfile: ClassVar[staticmethod] = staticmethod(zipfile.is_zipfile)
+    is_zipfile: staticmethod = staticmethod(zipfile.is_zipfile)
     
     # TODO: Support for other file types? tar.bz2
     TarFile: ClassVar[type[tarfile.TarFile]] = tarfile.TarFile
@@ -33,9 +29,8 @@ class CoreZip:
 
 
 
-
 class Serializable:
-    is_dataclass = staticmethod(is_dataclass)
+    is_dataclass: ClassVar[staticmethod] = staticmethod(is_dataclass)
     
     def asdict(self) -> dict[str, Any]:
         if self.is_dataclass(self):
@@ -73,7 +68,7 @@ class Serializable:
     weakref_slot=True
 )
 class ArchiveMetadata(Serializable):
-    file: PathLike
+    archive_file: PathLike
     time_created: Optional[float | datetime] = None
     time_modified: Optional[float | datetime] = None
     size: Optional[int] = None
@@ -88,17 +83,11 @@ class ArchiveMetadata(Serializable):
     days_since_modified: Optional[datetime] = field(default=None, init=False, repr=False)
     
     def __post_init__(self) -> None:
-        if all(map(is_numeric, (self.total_compressed, self.total_uncompressed))):
-            self.ratio = calculate_ratio(self.total_compressed, self.total_uncompressed)
-        
-        if is_numeric(self.time_created):
-            self.time_created_dt = datetime.fromtimestamp(self.time_created)
-            self.days_since_created = calculate_days_since_created(self.time_created)
-        
-        if is_numeric(self.time_modified):
-            self.time_modified_dt = datetime.fromtimestamp(self.time_modified)
-            self.days_since_modified = calculate_days_since_created(self.time_modified)
-
+        self.ratio = calculate_ratio(self.total_compressed, self.total_uncompressed)
+        self.time_created_dt = fromtimestamp(self.time_created)
+        self.days_since_created = calculate_days_since_created(self.time_created)
+        self.time_modified_dt = fromtimestamp(self.time_modified)
+        self.days_since_modified = calculate_days_since_created(self.time_modified)
 
 
 

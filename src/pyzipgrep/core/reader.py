@@ -1,17 +1,19 @@
 from functools import wraps
 from pathlib import Path
 
-from ..core.models import CoreZip, ArchiveMetadata
+from ..core.models import ArchiveMetadata, CoreZip
 from ..utils.common import has_attribute
-
-
+from ..utils.exceptions import ArchiveKeyError
 
 
 
 class ArchiveReader(ArchiveMetadata, CoreZip):
     def __init__(self, archive_file):
         self._archive_file = Path(archive_file).expanduser()
-        super().__init__(**self.get_metadata() or {"file": self._archive_file})
+        super().__init__(
+            **self.get_archive_metadata()
+            or {"archive_file": self._archive_file}
+            )
     
     def __must_exist(default=None):
         def decorator(func):
@@ -25,8 +27,13 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
             return wrapper
         return decorator
     
+    @__must_exist()
+    def __len__(self):
+        return len(self.infolist())
+    
     @staticmethod
     def serialize_archive(archive_file):
+        # TODO: Remove?
         return ArchiveReader(archive_file)
     
     @__must_exist()
@@ -37,18 +44,14 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
     def open_file_path(self, file_path):
         try:
             return self.read_zip().open(file_path)
-        except KeyError:
-            raise KeyError(
+        except KeyError as ke:
+            raise ArchiveKeyError(
                 f"There is no item named {file_path!r} in the archive {self._archive_file!r}"
-            )
+            ) from ke
     
     @__must_exist()
     def is_valid_zipfile(self) -> bool:
         return super().is_zipfile(self._archive_file)
-    
-    @__must_exist()
-    def __len__(self):
-        return len(self.infolist())
 
     @__must_exist(default=[])
     def infolist(self):
@@ -59,7 +62,7 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
         return self.read_zip().namelist()
     
     @__must_exist(default={})
-    def get_metadata(self):
+    def get_archive_metadata(self):
         def _get_stat(attr):
             return sum(getattr(i, attr) for i in infolist)
         
@@ -82,7 +85,7 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
         total_compressed = _get_stat("compress_size")
         
         return {
-            "file": archive,
+            "archive_file": archive,
             "time_created": time_created,
             "time_modified": time_modified,
             "size": size,
