@@ -1,5 +1,4 @@
 import asyncio
-from collections import deque
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
@@ -11,11 +10,11 @@ from ..utils.common import (
     get_posix_name,
     is_pathlike,
     make_clones,
-    terminate,
     unpack_error,
     validate_chunk_size,
     validate_predicate,
 )
+from ..utils.exceptions import NoValidArchives
 from .models import ArchiveMatch
 from .streamer import ArchiveStreamer
 
@@ -33,7 +32,6 @@ class ArchiveEngine:
         self._recursive = recursive
         self.__bad_archives = set()
         self.__good_archives = set()
-        self.__skipped_archives = set()
         self.__len_bad_archives = None
         self.__len_good_archives = None
     
@@ -54,6 +52,7 @@ class ArchiveEngine:
             s_archive = ArchiveStreamer(archive)
             
             if archive_predicate and not archive_predicate(s_archive):
+                # TODO: Add skipped archives to a set for debugging/verbose purposes?
                 continue
             
             self.__good_archives.add(s_archive)
@@ -72,9 +71,7 @@ class ArchiveEngine:
                 msg = "No archives satisfied the specified criteria."
             else:
                 msg = "No archives were detected in the provided path(s)."
-            
-            logger.error(msg)
-            terminate(1)
+            raise NoValidArchives(msg)
 
     def iter_through_archives(self, archive_predicate=None, file_predicate=None):
         """Yield (archive, inner_file) pairs across all archives in parallel."""
@@ -140,7 +137,7 @@ class ArchiveEngine:
                 
                 archive_file = archive.archive_file
                 
-                if inner_file.endswith(".zip"):
+                if inner_file.endswith(".zip") and self._recursive:
                     if not ArchiveStreamer.is_zipfile(inner_file):
                         logger.warning(
                             f"Invalid nested archive detected: {inner_file!r} in parent archive {archive_file!r}. "
@@ -214,6 +211,10 @@ class ArchiveEngine:
     @ClassProperty
     def nested_count(cls):
         return cls.NESTED_COUNT
+    
+    @property
+    def corrupted_archives(self) -> set:
+        return self.__bad_archives
 
 
 

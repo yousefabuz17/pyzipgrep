@@ -9,7 +9,7 @@ from ..utils.exceptions import ArchiveKeyError
 
 class ArchiveReader(ArchiveMetadata, CoreZip):
     def __init__(self, archive_file):
-        self._archive_file = Path(archive_file).expanduser()
+        self._archive_file: Path = Path(archive_file).expanduser()
         super().__init__(
             **self.get_archive_metadata()
             or {"archive_file": self._archive_file}

@@ -5,6 +5,8 @@ from itertools import tee
 from datetime import datetime
 from typing import Union
 
+from .exceptions import InvalidChunkSize, InvalidPredicate
+
 
 
 
@@ -82,7 +84,10 @@ def validate_predicate(predicate, predicate_name):
     if predicate is None:
         return
     
-    predicate_params = inspect.signature(predicate).parameters
+    predicate_params = [
+        k for k in inspect.signature(predicate).parameters
+        if k not in ("args", "kwargs")
+        ]
     len_params = len(predicate_params)
     valid_predicate = all((
         (is_callable := callable(predicate)),
@@ -90,19 +95,14 @@ def validate_predicate(predicate, predicate_name):
     ))
     
     if not valid_predicate:
-        logger = get_logger()
-        logger.error(
-            f"Invalid predicate '{predicate_name}': must be callable AND accept exactly 1 argument."
-            f"\nReturned {is_callable = } and {len_params!r} params."
+        raise InvalidPredicate(
+            f"Invalid predicate {predicate_name!r}: must be callable AND accept exactly 1 argument."
+            f"\nReturned {is_callable = } and {len_params = }."
         )
-        terminate(1)
-
-
 
 
 def unpack_error(e):
     return str(e.args[0] if e.args else e)
-
 
 
 def has_attribute(obj, attr, check_value=True):
@@ -149,11 +149,20 @@ def calculate_days_since_created(time_created):
         return time_created.days
 
 
-def get_posix_name(fp) -> str:
+def get_posix_name(fp):
     if is_pathlike(fp) and hasattr(fp, "name"):
         fp = fp.name
     elif has_attribute(fp, "archive_file"):
         fp = get_posix_name(fp.archive_file)
+    return fp
+
+
+
+def to_posix(fp):
+    if is_pathlike(fp) and hasattr(fp, "as_posix"):
+        fp = fp.as_posix()
+    elif has_attribute(fp, "archive_file"):
+        fp = to_posix(fp.archive_file)
     return fp
 
 
@@ -166,13 +175,11 @@ def validate_chunk_size(chunk_size=None):
         chunk_size = DEFAULT_CHUNK_SIZE
     
     if chunk_size == 0:
-        logger = get_logger()
-        logger.error(
+        raise InvalidChunkSize(
             f"Invalid chunk size: {chunk_size!r}. "
             "Chunk size must be either `None` (to read the entire file) "
             "or a positive integer. Any other chunk size of <0 will be ignored."
         )
-        terminate(1)
     return chunk_size
 
 
@@ -211,7 +218,11 @@ def make_clones(obj, n=2, as_iter=True):
 
 
 
-def compiler(pattern, flags=0):
+def compiler(pattern, case_sensitive=False):
+    if not case_sensitive:
+        flags = re.IGNORECASE
+    else:
+        flags = 0
     return re.compile(pattern, flags=flags)
 
 

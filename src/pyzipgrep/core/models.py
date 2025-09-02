@@ -79,8 +79,8 @@ class ArchiveMetadata(Serializable):
     ratio: Optional[int | float] = field(default=None, init=False)
     time_created_dt: Optional[datetime] = field(default=None, init=False, repr=False)
     time_modified_dt: Optional[datetime] = field(default=None, init=False, repr=False)
-    days_since_created: Optional[datetime] = field(default=None, init=False, repr=False)
-    days_since_modified: Optional[datetime] = field(default=None, init=False, repr=False)
+    days_since_created: Optional[int] = field(default=None, init=False, repr=False)
+    days_since_modified: Optional[int] = field(default=None, init=False, repr=False)
     
     def __post_init__(self) -> None:
         self.ratio = calculate_ratio(self.total_compressed, self.total_uncompressed)

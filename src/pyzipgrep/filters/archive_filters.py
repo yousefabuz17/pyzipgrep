@@ -4,7 +4,9 @@ from datetime import datetime
 
 from ..core.models import ArchiveMetadata
 from ..utils.common import fromtimestamp
+from ..utils.exceptions import FilterException
 from .base import BaseFileFiltering
+from .file_filters import BasePathFilter, FileNameFilter
 
 
 
@@ -20,27 +22,43 @@ from .base import BaseFileFiltering
 #               - UserDefinedFilters?
 
 
-# NOTE: Archive name filtering will be derives from .file_filters
-
-
-
-
-def _any(iterable, use_any=True) -> bool:
+def has_values(iterable, use_any=True) -> bool:
     method = all if not use_any else any
     return method(i is not None for i in iterable)
 
-def _all(iterable) -> bool:
-    return _any(iterable, use_any=False)
+
+
+def all_values(iterable) -> bool:
+    return has_values(iterable, use_any=False)
+
+
+
+
+class ArchiveNameFilter(FileNameFilter):
+    pass
+
+
+
+
+class ArchivePathFilter(BasePathFilter):
+    def __init__(self, pattern=None, use_regex=False):
+        super().__init__(pattern, use_regex)
+
 
 
 
 class TimeFilter(BaseFileFiltering):
-    def __init__(self, before=None, after=None, based_on_time_created: bool = True):
+    def __init__(
+        self,
+        before=None,
+        after=None,
+        based_on_time_created: bool=True,
+        ):
         self._before = before
         self._after = after
         self._based_on_time_created = based_on_time_created
     
-    def __call__(self, archive_file: ArchiveMetadata):
+    def __call__(self, archive_file: ArchiveMetadata, **kwargs):
         before = self._serialize_time(self._before)
         after = self._serialize_time(self._after, upper_bound=True)
         
@@ -50,15 +68,19 @@ class TimeFilter(BaseFileFiltering):
             else "time_created_dt",
             )
         
-        if not _any((before, after, file_ts)):
+        if not has_values((before, after, file_ts)):
             return True
         
-        if _all((before, after)):
-            return before >= file_ts >= after
+        if all_values((before, after)):
+            if after > before:
+                raise FilterException(
+                    f"Invalid timestamp sequence: After time '{after}' cannot be greater than before time '{before}'."
+                )
+            return after <= file_ts <= before
         
         return any((
-            before and file_ts < before,
-            after and file_ts < after
+            before is not None and file_ts <= before,
+            after is not None and file_ts >= after
         ))
     
     def _serialize_time(self, arg, upper_bound: bool=False):
@@ -111,31 +133,35 @@ class TimeFilter(BaseFileFiltering):
 class RangeFilter(BaseFileFiltering):
     def __init__(
         self,
-        min_arg: int | float=None,
+        min_arg: int | float=0,
         max_arg: int | float=None,
         *,
-        metadata_attr: str=None
+        metadata_attr: str=None,
         ) -> None:
         self._min_arg = min_arg
         self._max_arg = max_arg
         self._attr = metadata_attr
     
-    def __call__(self, archive_file: ArchiveMetadata):
+    def __call__(self, archive_file: ArchiveMetadata, **kwargs):
         min_arg = self._min_arg
         max_arg = self._max_arg
         metadata_value = getattr(archive_file, self._attr)
         
-        if not _any((min_arg, max_arg, metadata_value)):
+        if not has_values((min_arg, max_arg, metadata_value)):
             return True
         
-        if _all((min_arg, max_arg)):
-            return min_arg <= metadata_value < max_arg
+        if all_values((min_arg, max_arg)):
+            if max_arg < min_arg:
+                raise FilterException(
+                    f"Max arg ({max_arg}) cannot be less than min arg ({min_arg})"
+                )
+            return min_arg <= metadata_value <= max_arg
         
-        if min_arg is not None:
-            return metadata_value >= min_arg
-        
-        if max_arg is not None:
-            return metadata_value < max_arg
+        return any((
+            min_arg is not None and metadata_value >= min_arg,
+            max_arg is not None and metadata_value <= max_arg
+        ))
+
 
 
 class SizeFilter(RangeFilter):
@@ -165,3 +191,15 @@ class TotalUncompressedFilter(RangeFilter):
 class RatioFilter(RangeFilter):
     def __init__(self, min_size=None, max_size=None):
         super().__init__(min_size, max_size, metadata_attr="ratio")
+
+
+
+class AgeCreatedFilter(RangeFilter):
+    def __init__(self, min_age=None, max_age=None):
+        super().__init__(min_age, max_age, metadata_attr="days_since_created")
+
+
+
+class AgeModifiedFilter(RangeFilter):
+    def __init__(self, min_age=None, max_age=None):
+        super().__init__(min_age, max_age, metadata_attr="days_since_modified")
