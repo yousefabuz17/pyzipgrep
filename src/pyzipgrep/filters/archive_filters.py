@@ -3,10 +3,9 @@ from datetime import datetime
 
 
 from ..core.models import ArchiveMetadata
-from ..utils.common import fromtimestamp
+from ..utils.common import fromtimestamp, all_values, has_values
 from ..utils.exceptions import FilterException
-from .base import BaseFileFiltering
-from .file_filters import BasePathFilter, FileNameFilter
+from .base import PZGFileFiltering
 
 
 
@@ -22,32 +21,9 @@ from .file_filters import BasePathFilter, FileNameFilter
 #               - UserDefinedFilters?
 
 
-def has_values(iterable, use_any=True) -> bool:
-    method = all if not use_any else any
-    return method(i is not None for i in iterable)
 
 
-
-def all_values(iterable) -> bool:
-    return has_values(iterable, use_any=False)
-
-
-
-
-class ArchiveNameFilter(FileNameFilter):
-    pass
-
-
-
-
-class ArchivePathFilter(BasePathFilter):
-    def __init__(self, pattern=None, use_regex=False):
-        super().__init__(pattern, use_regex)
-
-
-
-
-class TimeFilter(BaseFileFiltering):
+class TimeFilter(PZGFileFiltering):
     def __init__(
         self,
         before=None,
@@ -130,7 +106,7 @@ class TimeFilter(BaseFileFiltering):
 
 
 
-class RangeFilter(BaseFileFiltering):
+class RangeFilter(PZGFileFiltering):
     def __init__(
         self,
         min_arg: int | float=0,

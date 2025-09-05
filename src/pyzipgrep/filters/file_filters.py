@@ -1,8 +1,8 @@
-from functools import partial
 from typing import Iterable
 
-from .base import BaseFileFiltering, get_case_sensitive, regex_compiler
+from .base import PZGFileFiltering, regex_compiler
 from ..utils.common import (
+    is_regex_pattern,
     get_posix_name,
     is_string,
     to_posix
@@ -11,11 +11,12 @@ from ..utils.common import (
 
 
 
-class BasePathFilter(BaseFileFiltering):
-    def __init__(self, pattern, use_regex=False, name_only=False):
+class BasePathFilter(PZGFileFiltering):
+    def __init__(self, pattern, use_regex=False, name_only=False, case_sensitive=True):
         self._pattern = pattern
         self._use_regex = use_regex
         self._name_only = name_only
+        self._case_sensitive = case_sensitive
     
     def __call__(self, file, **kwargs):
         if self._name_only:
@@ -23,7 +24,11 @@ class BasePathFilter(BaseFileFiltering):
         else:
             file = to_posix(file)
         
-        case_sensitive = get_case_sensitive(**kwargs)
+        case_sensitive = self._case_sensitive
+        
+        if is_regex_pattern(self._pattern) and not self._use_regex:
+            self._use_regex = True
+        
         if self._use_regex:
             return regex_compiler(
                 self._pattern, file,
@@ -38,30 +43,31 @@ class BasePathFilter(BaseFileFiltering):
 
 
 class FileNameFilter(BasePathFilter):
-    def __init__(self, pattern, use_regex=False):
-        super().__init__(pattern, use_regex, name_only=True)
+    def __init__(self, pattern, use_regex=False, case_sensitive=True):
+        super().__init__(pattern, use_regex, case_sensitive=case_sensitive, name_only=True)
 
 
 
 
-class FileExtensionFilter(BaseFileFiltering):
+class FileExtensionFilter(PZGFileFiltering):
     def __init__(
         self,
         extensions: Iterable[str]=None,
         exclude_extensions: Iterable[str]=None,
+        case_sensitive=True
         ):
         self._extensions = extensions
         self._exclude_extensions = exclude_extensions
+        self._case_sensitive = case_sensitive
     
-    @staticmethod
-    def serialize_extension(extension, case_sensitive=True) -> str:
+    def serialize_extension(self, extension) -> str:
         if not extension:
             return ""
         
         if not extension.startswith("."):
             extension = "." + extension
         
-        if not case_sensitive:
+        if not self._case_sensitive:
             extension = extension.lower()
         return extension
     
@@ -81,13 +87,6 @@ class FileExtensionFilter(BaseFileFiltering):
           applies extension-based filtering, while still allowing precise control 
           over whether files with no extensions are permitted.
         
-        - Archive files (e.g., `.zip`) require explicit inclusion in the rule set.  
-          This means that files inside an archive are only processed if the archive 
-          itself passes the filter. For example, if `.zip` is not listed in the 
-          `extensions` set, no files within a `.zip` archive will be discovered.  
-          This design enforces intentional handling of container formats to avoid 
-          unwrapping archives the user did not explicitly allow.
-        
         - If both include (`extensions`) and exclude (`exclude_extensions`) sets exist,
           a file must match the include list and must not match the exclude list.
           This gives explicit control when overlaps occur.
@@ -95,8 +94,7 @@ class FileExtensionFilter(BaseFileFiltering):
         
         exts = self._extensions or []
         xexts = self._exclude_extensions or []
-        case_sensitive = get_case_sensitive(**kwargs)
-        
+
         # If no filters are provided → allow everything
         if not any((exts, xexts)):
             return True
@@ -107,12 +105,8 @@ class FileExtensionFilter(BaseFileFiltering):
         if is_string(xexts):
             xexts = [xexts]
         
-        serialize_extension = partial(
-            self.serialize_extension,
-            case_sensitive=case_sensitive
-        )
-        exts = set(serialize_extension(e) for e in exts)
-        xexts = set(serialize_extension(x) for x in xexts)
+        exts = set(self.serialize_extension(e) for e in exts)
+        xexts = set(self.serialize_extension(x) for x in xexts)
         file = get_posix_name(file)
         is_hidden_file = file.startswith(".") and file.count(".") == 1
         
@@ -129,7 +123,7 @@ class FileExtensionFilter(BaseFileFiltering):
         )):
             return bool(allow_no_extension_files)
         
-        file_suffix = serialize_extension(file.split(".")[-1])
+        file_suffix = self.serialize_extension(file.split(".")[-1])
         
         if all((exts, xexts)):
             return file_suffix in exts and file_suffix not in xexts

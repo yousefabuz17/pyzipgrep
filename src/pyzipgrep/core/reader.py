@@ -7,6 +7,22 @@ from ..utils.exceptions import ArchiveKeyError
 
 
 
+def must_exist(default=None):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if (self._archive_file
+                and self._archive_file.exists()
+                and self.is_zipfile(self._archive_file)):
+                return func(self, *args, **kwargs)
+            return default
+        return wrapper
+    return decorator
+
+
+
+
+
 class ArchiveReader(ArchiveMetadata, CoreZip):
     def __init__(self, archive_file):
         self._archive_file: Path = Path(archive_file).expanduser()
@@ -15,32 +31,15 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
             or {"archive_file": self._archive_file}
             )
     
-    def __must_exist(default=None):
-        def decorator(func):
-            @wraps(func)
-            def wrapper(self, *args, **kwargs):
-                if (self._archive_file
-                    and self._archive_file.exists()
-                    and self.is_zipfile(self._archive_file)):
-                    return func(self, *args, **kwargs)
-                return default
-            return wrapper
-        return decorator
-    
-    @__must_exist()
+    @must_exist()
     def __len__(self):
         return len(self.infolist())
     
-    @staticmethod
-    def serialize_archive(archive_file):
-        # TODO: Remove?
-        return ArchiveReader(archive_file)
-    
-    @__must_exist()
+    @must_exist()
     def read_zip(self):
         return super().ZipFile(self._archive_file, mode="r")
     
-    @__must_exist()
+    @must_exist()
     def open_file_path(self, file_path):
         try:
             return self.read_zip().open(file_path)
@@ -49,19 +48,19 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
                 f"There is no item named {file_path!r} in the archive {self._archive_file!r}"
             ) from ke
     
-    @__must_exist()
+    @must_exist()
     def is_valid_zipfile(self) -> bool:
         return super().is_zipfile(self._archive_file)
 
-    @__must_exist(default=[])
+    @must_exist(default=[])
     def infolist(self):
         return self.read_zip().infolist()
     
-    @__must_exist(default=[])
+    @must_exist(default=[])
     def namelist(self):
         return self.read_zip().namelist()
     
-    @__must_exist(default={})
+    @must_exist(default={})
     def get_archive_metadata(self):
         def _get_stat(attr):
             return sum(getattr(i, attr) for i in infolist)

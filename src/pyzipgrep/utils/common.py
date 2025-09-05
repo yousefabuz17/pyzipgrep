@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+from collections.abc import Iterator
 from itertools import tee
 from datetime import datetime
 from typing import Union
@@ -10,10 +11,8 @@ from .exceptions import InvalidChunkSize, InvalidPredicate
 
 
 
-DEFAULT_CHUNK_SIZE = 1024   # 1KB
-
-
 PathLike = Union[str, os.PathLike]
+RegexPattern = re.Pattern
 
 
 
@@ -26,38 +25,55 @@ class ClassProperty:
 
 
 
-def get_logger():
-    root_logger = logging.getLogger()
+
+
+def get_logger(name=None):
+    root_logger = logging.getLogger(name)
     
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
-
-    level = logging.INFO
-
-    formatter = logging.Formatter(
-        fmt="[%(asctime)s-%(levelname)s]--%(message)s",
-        datefmt="%Y-%m-%dT%I:%M:%S%p",
-    )
     
-    console_handler = logging.StreamHandler()
-    console_handler.setLevel(level)
-    console_handler.setFormatter(formatter)
+    if name != "quiet":
+        level = logging.INFO
+        console_handler = logging.StreamHandler()
 
-    root_logger.setLevel(level)
-    root_logger.addHandler(console_handler)
+        root_logger.setLevel(level)
+        root_logger.addHandler(console_handler)
+    else:
+        root_logger.addHandler(logging.NullHandler())
     
+    root_logger.propagate = False
     return root_logger
+
+
+
+def quiet_logger(name="quiet"):
+    return get_logger(name=name)
+
 
 
 def default_max_workers():
     return min(32, (os.cpu_count() or 1) + 4)
 
 
+def is_regex_pattern(pattern):
+    return isinstance(pattern, RegexPattern)
+
+
+def has_values(iterable, use_any=True) -> bool:
+    method = all if not use_any else any
+    return method(i is not None for i in iterable)
+
+
+def all_values(iterable) -> bool:
+    return has_values(iterable, use_any=False)
+
+
+
 def fn_matcher(name, pat):
     from fnmatch import fnmatch, fnmatchcase
     from functools import partial
     from pathlib import Path
-    from re import Pattern
     
     def _fnmatcher(n, p):
         return any((
@@ -66,7 +82,7 @@ def fn_matcher(name, pat):
             fnmatchcase(n, p)
             ))
     
-    if not isinstance(pat, (str, Pattern)):
+    if not isinstance(pat, (str, RegexPattern)):
         return any(map(partial(_fnmatcher, name), pat))
     return _fnmatcher(name, pat)
 
@@ -76,6 +92,10 @@ def bytes_to_str(obj):
     if isinstance(obj, bytes):
         obj = obj.decode("utf-8", errors="ignore")
     return obj
+
+
+def is_exhaustible(obj):
+    return isinstance(obj, Iterator)
 
 
 def validate_predicate(predicate, predicate_name):
@@ -171,9 +191,6 @@ def validate_chunk_size(chunk_size=None):
     if chunk_size is None:
         return
     
-    if not is_numeric(chunk_size):
-        chunk_size = DEFAULT_CHUNK_SIZE
-    
     if chunk_size == 0:
         raise InvalidChunkSize(
             f"Invalid chunk size: {chunk_size!r}. "
@@ -185,14 +202,15 @@ def validate_chunk_size(chunk_size=None):
 
 def is_numeric(obj):
     from math import isnan
-    return not isnan(obj)
+    if obj is not None:
+        return not isnan(obj)
 
 
 def is_string(string):
     return isinstance(string, str)
 
 
-def terminate(status):
+def terminate(status=0):
     import sys
     sys.exit(status)
 
@@ -206,6 +224,7 @@ def calculate_ratio(
     
     if uncompressed_size == 0:
         return
+    
     ratio = (1 - compressed_size / uncompressed_size) * 100
     return round(ratio, 2)
 
@@ -218,7 +237,7 @@ def make_clones(obj, n=2, as_iter=True):
 
 
 
-def compiler(pattern, case_sensitive=False):
+def compiler(pattern, case_sensitive=True):
     if not case_sensitive:
         flags = re.IGNORECASE
     else:

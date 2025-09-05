@@ -1,16 +1,18 @@
-from .base import BaseFilter, regex_compiler
+from .base import PZGFilter, regex_compiler
 
 
 
 
 
-class ContentFilter(BaseFilter):
-    def __init__(self, pattern, use_regex=False):
+class ContentFilter(PZGFilter):
+    def __init__(self, pattern, use_regex=False, case_sensitive=True):
         self._pattern = pattern
         self._use_regex = use_regex
+        self._case_sensitive = case_sensitive
     
     def __call__(self, files_content, **kwargs):
-        case_sensitive = kwargs.get("case_sensitive", True)
+        case_sensitive = self._case_sensitive
+        
         if self._use_regex:
             return regex_compiler(
                 self._pattern,
@@ -25,13 +27,17 @@ class ContentFilter(BaseFilter):
 
 
 class ContentStringFilter(ContentFilter):
-    def __init__(self, pattern):
-        super().__init__(pattern, use_regex=False)
+    def __init__(self, pattern, case_sensitive=True):
+        super().__init__(pattern, case_sensitive=case_sensitive)
 
 
 
 
 
 class ContentRegexFilter(ContentFilter):
-    def __init__(self, pattern):
-        super().__init__(pattern, use_regex=True)
+    def __init__(self, pattern, case_sensitive=True):
+        super().__init__(
+            pattern,
+            use_regex=True,
+            case_sensitive=case_sensitive
+        )

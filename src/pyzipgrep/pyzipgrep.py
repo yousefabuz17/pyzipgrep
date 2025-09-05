@@ -1,9 +1,4 @@
 from .core.engine import ArchiveEngine
-from .utils.common import (
-    get_logger,
-)
-
-
 
 
 # TODO: Implement a class or module encapsulating predicate-based filtering functionality
@@ -67,24 +62,9 @@ from .utils.common import (
 
 
 
-logger = get_logger()
-
-
-
-
 class pyzipgrep(ArchiveEngine):
-    def __init__(self, glob_zips, max_workers=None, recursive=False):
-        super().__init__(glob_zips, max_workers, recursive)
-    
-    # TODO:
-    # Once filtering mechanisms are fairly complete,
-    # update content manager to accept them as a clean way for filtering
-    # E.g,
-    # async match in pyzipgrep.<>(
-    #   run_archive_filters(predicates)         # Can be multiple predicates, based on its name, ext, metadata etc
-    #   run_inner_file_filters(predicates)      # Can be based on its str representation
-    #   run_file_content_filters(predicates)    # Can be based on anything like contains, length, specific text etc.
-    # )
+    def __init__(self, archives, max_workers=None, verbose=True):
+        super().__init__(archives, max_workers, verbose)
     
     async def __aenter__(self):
         return self

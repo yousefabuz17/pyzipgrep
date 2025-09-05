@@ -27,7 +27,3 @@ class ArchiveStreamer(ArchiveReader):
     def iter_files_from_archive(self):
         """Yield all file names inside this archive."""
         yield from self.namelist()
-
-    def find_file_within_archive(self):
-        """Yield file names inside this archive matching predicate."""
-        yield from self.iter_files_from_archive()
