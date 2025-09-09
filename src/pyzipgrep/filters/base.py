@@ -1,16 +1,11 @@
 from abc import ABC, abstractmethod
 from typing import Iterable
 
-from ..utils.common import compiler
 
 
-# NOTE: Main difference between archive and inner file will be upon its attributes
-#   - ArchiveFiltering will filter based on its archive metadata
-#   - InnerFileFiltering will simply only filter based its str representation
-
-
-def regex_compiler(pattern, obj, *, case_sensitive=True):
-    return bool(compiler(pattern, case_sensitive).search(obj))
+FILTER_ALL = all
+FILTER_ANY = any
+FILTER_NONE = lambda results: not any(results)
 
 
 
@@ -43,7 +38,7 @@ class PZGFileFiltering(PZGFilter):
 class LogicalFilter(PZGFileFiltering):
     def __init__(self, filters, method=None):
         super().__init__(filters)
-        self._method = method or all
+        self._method = method or FILTER_ALL
     
     def __call__(self, archive_or_inner_file, **kwargs):
         case_sensitive = self._case_sensitive
@@ -53,21 +48,17 @@ class LogicalFilter(PZGFileFiltering):
 
 class PZGAndFilter(LogicalFilter):
     def __init__(self, *args):
-        super().__init__(*args, method=all)
+        super().__init__(*args, method=FILTER_ALL)
 
 
 class PZGOrFilter(LogicalFilter):
     def __init__(self, *args):
-        super().__init__(*args, method=any)
+        super().__init__(*args, method=FILTER_ANY)
 
 
 class PZGNotFilter(LogicalFilter):
     def __init__(self, *args):
-        super().__init__(*args, method=PZGNotFilter.negate)
-    
-    @staticmethod
-    def negate(results):
-        return not any(results)
+        super().__init__(*args, method=FILTER_NONE)
 
 
 
@@ -76,12 +67,11 @@ class ProcessFilters(LogicalFilter):
     def __init__(
         self,
         filters: Iterable[PZGFilter],
-        case_sensitive=True,
         require_all=True,
         require_none=False
         ) -> None:
         
-        method = any if not require_all else all
+        method = FILTER_ANY if not require_all else FILTER_ALL
         if require_none:
             method = PZGNotFilter.negate
-        super().__init__(filters, case_sensitive=case_sensitive, method=method)
+        super().__init__(filters, method=method)

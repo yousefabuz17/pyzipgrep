@@ -1,3 +1,4 @@
+import statistics
 import sys
 import tarfile
 import zipfile
@@ -147,14 +148,24 @@ class ColorizeMatch(Serializable):
             "green": "32m", "yellow": "33m",
             "blue": "34m", "magenta": "35m",
             "cyan": "36m", "white": "37m",
+            "reset": "\033[0m"
         }
         if colors_only:
             colors = tuple(colors)
         return colors
     
-    def get_color(self, color: str):
-        colors = self.available_colors()
+    @classmethod
+    def get_color(cls, color: str):
+        colors = cls.available_colors()
         return colors.get(color, colors["red"])
+    
+    @classmethod
+    def colorize_text(cls, text, color="green", bold=True):
+        colors = cls.available_colors()
+        color = cls.get_color(color)
+        reset = colors["reset"]
+        bold_ = "" if not bold else "1;"
+        return f"\033[{bold_}{color}{text}{reset}"
     
     def colorize_object(self, obj, object_type):
         # TODO: Shorten this if possible?
@@ -187,7 +198,8 @@ class ColorizeMatch(Serializable):
 
         object_scheme_type = schemes.get(self.scheme, schemes[""])
         object_color = object_scheme_type[object_type]
-        return f"{object_color}{obj}\033[0m"
+        reset = self.get_color("reset")
+        return f"{object_color}{obj}{reset}"
 
 
 
@@ -292,3 +304,84 @@ class ArchiveMatch(Serializable):
         # Human-readable string for CLI output, similar to zipgrep.
         # Format: [archive]inner_file:line_no:match_text
         return self.__format__("str")
+
+
+
+
+@dataclass(
+    unsafe_hash=True,
+    slots=True,
+    weakref_slot=True
+)
+class Benchmarks:
+    package: str
+    timings: list[float]
+    performance_index: Optional[float] = float("-inf")
+    mean: float = field(default=None, init=False)
+    stdev: float = field(default=None, init=False)
+    min_timings: float = field(default=None, init=False)
+    max_timings: float = field(default=None, init=False)
+    cold_start_duration: float = field(default=None, init=False)
+    inverse_time: float = field(default=None, init=False)
+    relative_speed: float = field(default=None, init=False)
+    efficiency_score: float = field(default=None, init=False)
+    
+    def __post_init__(self):
+        if self.timings and len(self.timings) >= 1:
+            self.cold_start_duration = self.to_ms(self.timings.pop(0))
+            self.mean = self.to_ms(statistics.mean(self.timings))
+            self.stdev = self.to_ms(statistics.stdev(self.timings)) if len(self.timings) > 1 else 0
+            self.min_timings = self.to_ms(min(self.timings))
+            self.max_timings = self.to_ms(max(self.timings))
+            self.inverse_time = 1 / self.mean
+            self.relative_speed = 1000 / self.mean
+            self.efficiency_score = 100000 / self.mean
+    
+    def __repr__(self):
+        try:
+            return f"""
+{self.package.upper()}:
+  ~~> Mean: {self.mean:.2f} ms
+  ~~> Std:  {self.stdev:.2f} ms
+  ~~> Min:  {self.min_timings:.2f} ms
+  ~~> Max:  {self.max_timings:.2f} ms
+  ~~> Cold Start:  {self.cold_start_duration:.2f} ms
+  ~~> Inverse Time:  {self.inverse_time:.2f} ms
+  ~~> Relative Throughput:  {self.relative_speed:.2f} searches/sec
+  ~~> Efficiency Score:  {self.efficiency_score:.2f}
+  ~~> Normalized Performance Index:  {self.performance_index:.3f}
+"""
+        except TypeError:
+            return super(Benchmarks, self).__repr__()
+
+    def __truediv__(self, other):
+        if not isinstance(other, Benchmarks):
+            return NotImplemented
+        return self.mean / other.mean
+    
+    def __rtruediv__(self, other):
+        if not isinstance(other, (int, float)):
+            return NotImplemented
+        return other / self.mean
+    
+    def __bool__(self):
+        return bool(self.timings)
+    
+    def __eq__(self, other):
+        if not isinstance(other, Benchmarks):
+            return NotImplemented
+        return self.mean == other.mean
+    
+    def is_faster(self, other):
+        if not isinstance(other, Benchmarks):
+            return NotImplemented
+        
+        return (other.mean / self.mean) >= (self.mean / other.mean)
+    
+    @staticmethod
+    def to_ms(number):
+        return number * 1000
+    
+    @classmethod
+    def dummy_benchmark(cls, package):
+        return cls(package, [10e-5]*3)

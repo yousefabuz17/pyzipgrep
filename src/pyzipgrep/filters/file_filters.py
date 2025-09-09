@@ -1,10 +1,11 @@
 from typing import Iterable
 
-from .base import PZGFileFiltering, regex_compiler
+from .base import PZGFileFiltering
 from ..utils.common import (
-    is_regex_pattern,
+    has_values,
     get_posix_name,
     is_string,
+    regex_search,
     to_posix
 )
 
@@ -26,18 +27,16 @@ class BasePathFilter(PZGFileFiltering):
         
         case_sensitive = self._case_sensitive
         
-        if is_regex_pattern(self._pattern) and not self._use_regex:
-            self._use_regex = True
-        
         if self._use_regex:
-            return regex_compiler(
+            return regex_search(
                 self._pattern, file,
                 case_sensitive=case_sensitive
                 )
         
         if not case_sensitive:
             file = file.lower()
-        return self._pattern in file
+        
+        return self._pattern == file
 
 
 
@@ -61,7 +60,10 @@ class FileExtensionFilter(PZGFileFiltering):
         self._case_sensitive = case_sensitive
     
     def serialize_extension(self, extension) -> str:
-        if not extension:
+        if extension is None:
+            return
+        
+        if extension == "":
             return ""
         
         if not extension.startswith("."):
@@ -96,7 +98,7 @@ class FileExtensionFilter(PZGFileFiltering):
         xexts = self._exclude_extensions or []
 
         # If no filters are provided → allow everything
-        if not any((exts, xexts)):
+        if not has_values((exts, xexts)):
             return True
         
         if is_string(exts):
@@ -105,23 +107,32 @@ class FileExtensionFilter(PZGFileFiltering):
         if is_string(xexts):
             xexts = [xexts]
         
-        exts = set(self.serialize_extension(e) for e in exts)
-        xexts = set(self.serialize_extension(x) for x in xexts)
+        exts = set(se for e in exts if (se := self.serialize_extension(e)) is not None)
+        xexts = set(xse for x in xexts if (xse := self.serialize_extension(x)) is not None)
         file = get_posix_name(file)
-        is_hidden_file = file.startswith(".") and file.count(".") == 1
         
         # Rationale: files with no suffix
         # or hidden dotfiles (like `.env`) often have no extension
         # are ONLY allowed if user explicitly
         # included "" in the extension set. This enforces clarity in filtering.
-        allow_no_extension_files = "" in exts
+        is_hidden_file = file.startswith(".") and file.count(".") == 1
+        no_extension_file = "." not in file
         
         if any((
-            "." not in file,
+            no_extension_file,
             is_hidden_file,
-            allow_no_extension_files
+            allow_no_extension_files := "" in exts,
+            "" in xexts,
         )):
-            return bool(allow_no_extension_files)
+            exclude_no_extension_files = "" not in xexts
+            
+            if all((exts, xexts)):
+                return allow_no_extension_files and exclude_no_extension_files
+            
+            if exts and not xexts:
+                return allow_no_extension_files
+            
+            return exclude_no_extension_files
         
         file_suffix = self.serialize_extension(file.split(".")[-1])
         

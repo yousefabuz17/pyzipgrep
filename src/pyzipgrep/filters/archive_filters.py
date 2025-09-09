@@ -4,21 +4,8 @@ from datetime import datetime
 
 from ..core.models import ArchiveMetadata
 from ..utils.common import fromtimestamp, all_values, has_values
-from ..utils.exceptions import FilterException
+from ..utils.exceptions import ErrorCodes
 from .base import PZGFileFiltering
-
-
-
-# TODO:
-# ** Create a `create_filters` method?
-#   - Retrieve all provided arguments
-#       - Pass them into the method
-#       - Returns an iterable of custom made filters
-#           - Filters for 3 categories?
-#               - ArchiveFiltering
-#               - InnerFileFiltering
-#               - FileContentFiltering
-#               - UserDefinedFilters?
 
 
 
@@ -49,7 +36,8 @@ class TimeFilter(PZGFileFiltering):
         
         if all_values((before, after)):
             if after > before:
-                raise FilterException(
+                raise ErrorCodes.raise_error(
+                    ErrorCodes.FILTER_ERROR,
                     f"Invalid timestamp sequence: After time '{after}' cannot be greater than before time '{before}'."
                 )
             return after <= file_ts <= before
@@ -128,7 +116,8 @@ class RangeFilter(PZGFileFiltering):
         
         if all_values((min_arg, max_arg)):
             if max_arg < min_arg:
-                raise FilterException(
+                raise ErrorCodes.raise_error(
+                    ErrorCodes.FILTER_ERROR,
                     f"Max arg ({max_arg}) cannot be less than min arg ({min_arg})"
                 )
             return min_arg <= metadata_value <= max_arg

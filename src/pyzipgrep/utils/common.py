@@ -6,7 +6,7 @@ from itertools import tee
 from datetime import datetime
 from typing import Union
 
-from .exceptions import InvalidChunkSize, InvalidPredicate
+from .exceptions import ErrorCodes
 
 
 
@@ -16,28 +16,16 @@ RegexPattern = re.Pattern
 
 
 
-class ClassProperty:
-    def __init__(self, fget):
-        self.fget = fget
-    
-    def __get__(self, instance, owner):
-        return self.fget(owner)
 
-
-
-
-
-def get_logger(name=None):
+def get_logger(verbose=True, name=None):
     root_logger = logging.getLogger(name)
     
     if root_logger.hasHandlers():
         root_logger.handlers.clear()
     
-    if name != "quiet":
-        level = logging.INFO
+    if verbose:
         console_handler = logging.StreamHandler()
-
-        root_logger.setLevel(level)
+        root_logger.setLevel(logging.INFO)
         root_logger.addHandler(console_handler)
     else:
         root_logger.addHandler(logging.NullHandler())
@@ -47,17 +35,13 @@ def get_logger(name=None):
 
 
 
-def quiet_logger(name="quiet"):
-    return get_logger(name=name)
+def quiet_logger():
+    return get_logger(verbose=False, name="quiet")
 
 
 
 def default_max_workers():
     return min(32, (os.cpu_count() or 1) + 4)
-
-
-def is_regex_pattern(pattern):
-    return isinstance(pattern, RegexPattern)
 
 
 def has_values(iterable, use_any=True) -> bool:
@@ -115,7 +99,8 @@ def validate_predicate(predicate, predicate_name):
     ))
     
     if not valid_predicate:
-        raise InvalidPredicate(
+        raise ErrorCodes(
+            ErrorCodes.PREDICATE_ERROR,
             f"Invalid predicate {predicate_name!r}: must be callable AND accept exactly 1 argument."
             f"\nReturned {is_callable = } and {len_params = }."
         )
@@ -192,7 +177,8 @@ def validate_chunk_size(chunk_size=None):
         return
     
     if chunk_size == 0:
-        raise InvalidChunkSize(
+        raise ErrorCodes(
+            ErrorCodes.CHUNK_SIZE_ERROR,
             f"Invalid chunk size: {chunk_size!r}. "
             "Chunk size must be either `None` (to read the entire file) "
             "or a positive integer. Any other chunk size of <0 will be ignored."
@@ -200,10 +186,15 @@ def validate_chunk_size(chunk_size=None):
     return chunk_size
 
 
-def is_numeric(obj):
+def is_numeric(obj: str | int | float):
     from math import isnan
     if obj is not None:
-        return not isnan(obj)
+        if is_string(obj):
+            if obj.isnumeric():
+                obj = int(obj)
+        if isinstance(obj, (int, float)):
+            return not isnan(obj)
+    return False
 
 
 def is_string(string):
@@ -216,10 +207,10 @@ def terminate(status=0):
 
 
 def calculate_ratio(
-    compressed_size: int | float,
-    uncompressed_size: int | float
+    compressed_size: str | int | float,
+    uncompressed_size: str | int | float
     ):
-    if not any(map(is_numeric, (compressed_size, uncompressed_size))):
+    if not all(map(is_numeric, (compressed_size, uncompressed_size))):
         return
     
     if uncompressed_size == 0:
@@ -238,11 +229,17 @@ def make_clones(obj, n=2, as_iter=True):
 
 
 def compiler(pattern, case_sensitive=True):
+    flags = 0
+    
     if not case_sensitive:
-        flags = re.IGNORECASE
-    else:
-        flags = 0
+        flags |= re.IGNORECASE
+    
+    pattern = pattern.replace("*", ".*").replace("?", ".")
     return re.compile(pattern, flags=flags)
+
+
+def regex_search(pattern, obj, *, case_sensitive=True):
+    return bool(compiler(pattern, case_sensitive).search(obj))
 
 
 def regex_escape(s):

@@ -63,8 +63,8 @@ from .core.engine import ArchiveEngine
 
 
 class pyzipgrep(ArchiveEngine):
-    def __init__(self, archives, max_workers=None, verbose=True):
-        super().__init__(archives, max_workers, verbose)
+    def __init__(self, archives, max_workers=None, verbose=True, allow_hidden_paths=False):
+        super().__init__(archives, max_workers, verbose, allow_hidden_paths)
     
     async def __aenter__(self):
         return self

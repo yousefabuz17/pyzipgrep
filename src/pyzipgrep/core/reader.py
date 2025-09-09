@@ -3,7 +3,7 @@ from pathlib import Path
 
 from ..core.models import ArchiveMetadata, CoreZip
 from ..utils.common import has_attribute
-from ..utils.exceptions import ArchiveKeyError
+from ..utils.exceptions import ErrorCodes
 
 
 
@@ -44,7 +44,8 @@ class ArchiveReader(ArchiveMetadata, CoreZip):
         try:
             return self.read_zip().open(file_path)
         except KeyError as ke:
-            raise ArchiveKeyError(
+            raise ErrorCodes.raise_error(
+                ErrorCodes.KEY_ERROR,
                 f"There is no item named {file_path!r} in the archive {self._archive_file!r}"
             ) from ke
     

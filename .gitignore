@@ -10,6 +10,8 @@ build/
 .venv/
 .uv/
 
+build.py
+
 # macOS
 .DS_Store
 

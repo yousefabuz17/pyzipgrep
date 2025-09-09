@@ -1,5 +1,7 @@
-from .base import PZGFilter, regex_compiler
+import operator
 
+from ..utils.common import is_numeric, regex_search
+from .base import PZGFilter
 
 
 
@@ -14,7 +16,7 @@ class ContentFilter(PZGFilter):
         case_sensitive = self._case_sensitive
         
         if self._use_regex:
-            return regex_compiler(
+            return regex_search(
                 self._pattern,
                 files_content,
                 case_sensitive=case_sensitive
@@ -41,3 +43,25 @@ class ContentRegexFilter(ContentFilter):
             use_regex=True,
             case_sensitive=case_sensitive
         )
+
+
+
+class ContentLengthFilter(PZGFilter):
+    def __init__(self, length: int | str):
+        self._length = length
+    
+    def __call__(self, files_content, **kwargs):
+        length = self._length
+        op = operator.eq
+        
+        if is_numeric(length):
+            length = int(length)
+        else:
+            if length.endswith(("-", "+")):
+                symbol = length[-1]
+                length = int(length[:-1])
+                if symbol == "-":
+                    op = operator.le
+                else:
+                    op = operator.ge
+        return op(len(files_content), length)
